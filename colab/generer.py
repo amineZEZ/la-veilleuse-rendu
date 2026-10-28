@@ -27,6 +27,11 @@ if not os.path.exists(H):
     sh("pip install -q diffusers transformers accelerate trimesh pymeshlab omegaconf einops "
        "scikit-image pygltflib opencv-python-headless")
 
+# Hunyuan3D-2.1 attend l'ancien nommage des poids de DINOv2 (transformers 4.46)
+import importlib.metadata as _md  # noqa: E402
+if not _md.version("transformers").startswith("4.46"):
+    sh("pip install -q transformers==4.46.3")
+
 sys.path.insert(0, os.path.join(H, "hy3dshape"))
 os.chdir(H)
 import torch  # noqa: E402
