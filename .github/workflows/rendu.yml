@@ -1,0 +1,86 @@
+name: Rendu
+on:
+  workflow_dispatch:
+    inputs:
+      debut: {description: "Première image", default: "1"}
+      fin: {description: "Dernière image", default: "840"}
+      morceaux: {description: "Nombre de morceaux", default: "42"}
+      echantillons: {description: "Échantillons Cycles (0 = ceux du fichier)", default: "0"}
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      tranches: ${{ steps.p.outputs.tranches }}
+    steps:
+      - id: p
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          a, b, n = ${{ inputs.debut }}, ${{ inputs.fin }}, ${{ inputs.morceaux }}
+          tot = b - a + 1; n = max(1, min(n, tot)); t = []
+          for i in range(n):
+              s = a + tot * i // n; e = a + tot * (i + 1) // n - 1
+              t.append({"s": s, "e": e})
+          print("tranches=" + json.dumps(t))
+          PY
+
+  rendu:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        tranche: ${{ fromJSON(needs.plan.outputs.tranches) }}
+    steps:
+      - uses: actions/cache@v4
+        id: cache
+        with:
+          path: blender
+          key: blender-5.2.2-linux-x64
+      - if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          curl -fsSL https://download.blender.org/release/Blender5.2/blender-5.2.2-linux-x64.tar.xz -o b.tar.xz
+          mkdir -p blender && tar -xf b.tar.xz -C blender --strip-components=1 && rm b.tar.xz
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq libxrender1 libxi6 libxkbcommon0 libsm6 libgl1 libxxf86vm1 libxfixes3 libegl1 > /dev/null
+      - run: gh release download v1 -R "$GITHUB_REPOSITORY" -p la_veilleuse.blend
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Calcul des images ${{ matrix.tranche.s }} à ${{ matrix.tranche.e }}
+        run: |
+          mkdir -p images
+          EXTRA=()
+          if [ "${{ inputs.echantillons }}" != "0" ]; then
+            EXTRA=(--python-expr "import bpy; bpy.context.scene.cycles.samples=${{ inputs.echantillons }}")
+          fi
+          ./blender/blender -b la_veilleuse.blend "${EXTRA[@]}" -o "$PWD/images/img_####" -F PNG \
+            -s ${{ matrix.tranche.s }} -e ${{ matrix.tranche.e }} -a 2>&1 | grep -E "Saved|Time:|Error|error" || true
+          ls images | wc -l
+      - uses: actions/upload-artifact@v4
+        with:
+          name: images-${{ matrix.tranche.s }}
+          path: images
+          retention-days: 7
+
+  montage:
+    needs: rendu
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: images-*
+          path: images
+          merge-multiple: true
+      - run: |
+          ls images | wc -l
+          sudo apt-get install -y -qq ffmpeg > /dev/null
+          ffmpeg -y -framerate 24 -start_number ${{ inputs.debut }} -i images/img_%04d.png \
+            -c:v libx264 -crf 15 -preset slow -pix_fmt yuv420p film.mp4
+      - uses: actions/upload-artifact@v4
+        with:
+          name: film
+          path: film.mp4
+          retention-days: 7
