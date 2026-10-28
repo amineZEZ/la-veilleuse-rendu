@@ -47,7 +47,15 @@ from hy3dshape.pipelines import Hunyuan3DDiTFlowMatchingPipeline  # noqa: E402
 from hy3dshape.postprocessors import DegenerateFaceRemover, FloaterRemover  # noqa: E402
 
 print("GPU :", torch.cuda.get_device_name(0), flush=True)
-pipe = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained("tencent/Hunyuan3D-2.1")
+# construit les réseaux directement sur la carte graphique en demi-précision : en pleine précision
+# sur le processeur, le modèle (3,3 milliards de paramètres) prendrait ~13 Go de RAM
+torch.set_default_device("cuda")
+torch.set_default_dtype(torch.float16)
+pipe = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained("tencent/Hunyuan3D-2.1", device="cuda", dtype=torch.float16)
+torch.set_default_dtype(torch.float32)
+torch.set_default_device("cpu")
+import gc  # noqa: E402
+gc.collect()
 out = "/content/sorties"
 os.makedirs(out, exist_ok=True)
 octree = int(os.environ.get("OCTREE", "384"))
