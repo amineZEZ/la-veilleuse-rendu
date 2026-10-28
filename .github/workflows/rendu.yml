@@ -10,7 +10,7 @@ on:
 
 jobs:
   plan:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       tranches: ${{ steps.p.outputs.tranches }}
     steps:
@@ -33,7 +33,7 @@ jobs:
 
   rendu:
     needs: plan
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 350
     strategy:
       fail-fast: false
@@ -75,7 +75,7 @@ jobs:
   montage:
     needs: rendu
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/download-artifact@v4
         with:
