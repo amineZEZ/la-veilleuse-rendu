@@ -6,6 +6,7 @@ on:
       fin: {description: "Dernière image", default: "840"}
       morceaux: {description: "Nombre de morceaux", default: "42"}
       echantillons: {description: "Échantillons Cycles (0 = ceux du fichier)", default: "0"}
+      liste: {description: "Images isolées, ex. 100,680,190 (remplace début/fin)", default: ""}
 
 jobs:
   plan:
@@ -18,10 +19,15 @@ jobs:
           python3 - <<'PY' >> "$GITHUB_OUTPUT"
           import json
           a, b, n = ${{ inputs.debut }}, ${{ inputs.fin }}, ${{ inputs.morceaux }}
-          tot = b - a + 1; n = max(1, min(n, tot)); t = []
-          for i in range(n):
-              s = a + tot * i // n; e = a + tot * (i + 1) // n - 1
-              t.append({"s": s, "e": e})
+          liste = "${{ inputs.liste }}".strip()
+          t = []
+          if liste:
+              t = [{"s": int(f), "e": int(f)} for f in liste.split(",")]
+          else:
+              tot = b - a + 1; n = max(1, min(n, tot))
+              for i in range(n):
+                  s = a + tot * i // n; e = a + tot * (i + 1) // n - 1
+                  t.append({"s": s, "e": e})
           print("tranches=" + json.dumps(t))
           PY
 
@@ -77,8 +83,12 @@ jobs:
       - run: |
           ls images | wc -l
           sudo apt-get install -y -qq ffmpeg > /dev/null
-          ffmpeg -y -framerate 24 -start_number ${{ inputs.debut }} -i images/img_%04d.png \
-            -c:v libx264 -crf 15 -preset slow -pix_fmt yuv420p film.mp4
+          if [ -z "${{ inputs.liste }}" ]; then
+            ffmpeg -y -framerate 24 -start_number ${{ inputs.debut }} -i images/img_%04d.png \
+              -c:v libx264 -crf 10 -preset slow -pix_fmt yuv420p film.mp4
+          else
+            cd images && zip -q ../film.mp4 *.png
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: film
