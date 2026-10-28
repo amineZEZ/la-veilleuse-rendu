@@ -1,0 +1,57 @@
+"""Génère les modèles 3D du film avec Hunyuan3D-2.1 (forme seule, haute résolution) sur le GPU de Colab.
+
+Dans une cellule Colab (GPU T4) :
+    !rm -rf /content/repo && git clone -q https://github.com/amineZEZ/la-veilleuse-rendu /content/repo && python /content/repo/colab/generer.py
+Puis :
+    from google.colab import files; files.download('/content/modeles.zip')
+
+Entrées : colab/entrees/*.png (images détourées). Sortie : /content/modeles.zip (un .glb par image).
+"""
+import glob
+import os
+import subprocess
+import sys
+import time
+import zipfile
+
+H = "/content/Hunyuan3D-2.1"
+
+
+def sh(cmd):
+    print("$", cmd, flush=True)
+    subprocess.run(cmd, shell=True, check=True)
+
+
+if not os.path.exists(H):
+    sh(f"git clone -q --depth 1 https://github.com/Tencent-Hunyuan/Hunyuan3D-2.1 {H}")
+    sh("pip install -q diffusers transformers accelerate trimesh pymeshlab omegaconf einops "
+       "scikit-image pygltflib opencv-python-headless")
+
+sys.path.insert(0, os.path.join(H, "hy3dshape"))
+os.chdir(H)
+import torch  # noqa: E402
+from PIL import Image  # noqa: E402
+from hy3dshape.pipelines import Hunyuan3DDiTFlowMatchingPipeline  # noqa: E402
+from hy3dshape.postprocessors import DegenerateFaceRemover, FloaterRemover  # noqa: E402
+
+print("GPU :", torch.cuda.get_device_name(0), flush=True)
+pipe = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained("tencent/Hunyuan3D-2.1")
+out = "/content/sorties"
+os.makedirs(out, exist_ok=True)
+octree = int(os.environ.get("OCTREE", "384"))
+for f in sorted(glob.glob("/content/repo/colab/entrees/*.png")):
+    nom = os.path.splitext(os.path.basename(f))[0].replace("_detoure", "")
+    t = time.time()
+    img = Image.open(f).convert("RGBA")
+    mesh = pipe(image=img, num_inference_steps=50, guidance_scale=5.0, octree_resolution=octree,
+                num_chunks=20000, generator=torch.manual_seed(1234), output_type="trimesh")[0]
+    mesh = FloaterRemover()(mesh)
+    mesh = DegenerateFaceRemover()(mesh)
+    mesh.export(os.path.join(out, f"{nom}.glb"))
+    print(f"OK {nom} : {len(mesh.faces)} faces, {time.time() - t:.0f} s", flush=True)
+    torch.cuda.empty_cache()
+
+with zipfile.ZipFile("/content/modeles.zip", "w") as z:
+    for g in glob.glob(f"{out}/*.glb"):
+        z.write(g, os.path.basename(g))
+print("FINI /content/modeles.zip", flush=True)
