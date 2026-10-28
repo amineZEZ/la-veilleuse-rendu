@@ -1,8 +1,10 @@
 # Active la carte graphique (OptiX, sinon CUDA) pour Cycles, puis laisse Blender calculer.
+import os
+
 import bpy
 
 p = bpy.context.preferences.addons["cycles"].preferences
-for kind in ("OPTIX", "CUDA"):
+for kind in os.environ.get("GPU_TYPE", "CUDA,OPTIX").split(","):
     try:
         p.compute_device_type = kind
         p.get_devices()
