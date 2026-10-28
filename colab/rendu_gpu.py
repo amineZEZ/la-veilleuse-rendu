@@ -3,7 +3,7 @@
 Dans une cellule Colab (GPU T4) :
     !rm -rf /content/repo && git clone -q https://github.com/amineZEZ/la-veilleuse-rendu /content/repo
     IMAGES = "100"            # ou "1-120", ou "100,560,680"
-    %run /content/repo/colab/rendu_gpu.py
+    %run -i /content/repo/colab/rendu_gpu.py
 Les images sont rangées dans /content/images puis envoyées par paquets (zip) sur l'ordinateur.
 """
 import glob
@@ -37,9 +37,6 @@ for part in spec.split(","):
     else:
         images.append(int(part))
 
-gpu = ("import bpy; p=bpy.context.preferences.addons['cycles'].preferences; p.compute_device_type='OPTIX'; "
-       "p.get_devices(); [setattr(d,'use',d.type!='CPU') for d in p.devices]; "
-       "bpy.context.scene.cycles.device='GPU'; print('GPU', [d.name for d in p.devices if d.use])")
 os.makedirs("/content/images", exist_ok=True)
 paquet = int(globals().get("PAQUET", 20))
 try:
@@ -51,7 +48,11 @@ for i in range(0, len(images), paquet):
     lot = images[i:i + paquet]
     t = time.time()
     for f in lot:
-        sh(f'{B} -b {F} --python-expr "{gpu}" -o /content/images/img_#### -F PNG -f {f} 2>&1 | grep -E "GPU|Saved|Time:|Error" || true')
+        r = subprocess.run(f"{B} -b {F} --python /content/repo/colab/gpu.py -o /content/images/img_#### -F PNG -f {f}",
+                           shell=True, capture_output=True, text=True)
+        lignes = (r.stdout + r.stderr).splitlines()
+        utiles = [l for l in lignes if any(k in l for k in ("GPU :", "Saved", "Time:", "rror"))]
+        print("\n".join(utiles or lignes[-25:]), flush=True)
     print(f"lot {lot[0]}-{lot[-1]} : {(time.time() - t) / len(lot):.0f} s par image", flush=True)
     z = f"/content/images_{lot[0]:04d}-{lot[-1]:04d}.zip"
     with zipfile.ZipFile(z, "w") as zf:
