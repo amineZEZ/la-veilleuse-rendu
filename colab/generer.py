@@ -29,8 +29,8 @@ if not os.path.exists(H):
 
 # Hunyuan3D-2.1 attend l'ancien nommage des poids de DINOv2 (transformers 4.46)
 import importlib.metadata as _md  # noqa: E402
-if not _md.version("transformers").startswith("4.46"):
-    sh("pip install -q transformers==4.46.3")
+if not _md.version("transformers").startswith("4.46") or not _md.version("diffusers").startswith("0.31"):
+    sh("pip install -q transformers==4.46.3 diffusers==0.31.0 huggingface_hub==0.26.5")
 
 sys.path.insert(0, os.path.join(H, "hy3dshape"))
 os.chdir(H)
