@@ -1,9 +1,9 @@
 """Génère les modèles 3D du film avec Hunyuan3D-2.1 (forme seule, haute résolution) sur le GPU de Colab.
 
 Dans une cellule Colab (GPU T4) :
-    !rm -rf /content/repo && git clone -q https://github.com/amineZEZ/la-veilleuse-rendu /content/repo && python /content/repo/colab/generer.py
-Puis :
-    from google.colab import files; files.download('/content/modeles.zip')
+    !rm -rf /content/repo && git clone -q https://github.com/amineZEZ/la-veilleuse-rendu /content/repo
+    %run /content/repo/colab/generer.py
+Chaque .glb est téléchargé dès qu'il est prêt (une machine Colab peut être recyclée à tout moment).
 
 Entrées : colab/entrees/*.png (images détourées). Sortie : /content/modeles.zip (un .glb par image).
 """
@@ -49,7 +49,12 @@ def _charger_mmap(*a, **k):
 torch.load = _charger_mmap
 from PIL import Image  # noqa: E402
 from hy3dshape.pipelines import Hunyuan3DDiTFlowMatchingPipeline  # noqa: E402
-from hy3dshape.postprocessors import DegenerateFaceRemover, FloaterRemover  # noqa: E402
+from hy3dshape.postprocessors import DegenerateFaceRemover, FaceReducer, FloaterRemover  # noqa: E402
+
+try:   # lancé avec %run dans le carnet : chaque modèle part sur l'ordinateur dès qu'il est prêt
+    from google.colab import files as _colab_files
+except ImportError:
+    _colab_files = None
 
 print("GPU :", torch.cuda.get_device_name(0), flush=True)
 # construit les réseaux directement sur la carte graphique en demi-précision : en pleine précision
@@ -72,7 +77,11 @@ for f in sorted(glob.glob("/content/repo/colab/entrees/*.png")):
                 num_chunks=20000, generator=torch.manual_seed(1234), output_type="trimesh")[0]
     mesh = FloaterRemover()(mesh)
     mesh = DegenerateFaceRemover()(mesh)
-    mesh.export(os.path.join(out, f"{nom}.glb"))
+    mesh = FaceReducer()(mesh, max_facenum=400000)
+    chemin = os.path.join(out, f"{nom}.glb")
+    mesh.export(chemin)
+    if _colab_files:
+        _colab_files.download(chemin)
     print(f"OK {nom} : {len(mesh.faces)} faces, {time.time() - t:.0f} s", flush=True)
     torch.cuda.empty_cache()
 
