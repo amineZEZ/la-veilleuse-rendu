@@ -30,6 +30,18 @@ if not os.path.exists(H):
 sys.path.insert(0, os.path.join(H, "hy3dshape"))
 os.chdir(H)
 import torch  # noqa: E402
+
+# Le modèle (7,4 Go) ferait déborder les 12 Go de RAM de Colab s'il était chargé en entier puis copié :
+# on le lit directement depuis le disque (mmap).
+_charger = torch.load
+
+
+def _charger_mmap(*a, **k):
+    k.setdefault("mmap", True)
+    return _charger(*a, **k)
+
+
+torch.load = _charger_mmap
 from PIL import Image  # noqa: E402
 from hy3dshape.pipelines import Hunyuan3DDiTFlowMatchingPipeline  # noqa: E402
 from hy3dshape.postprocessors import DegenerateFaceRemover, FloaterRemover  # noqa: E402
