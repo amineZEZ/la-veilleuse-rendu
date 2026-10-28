@@ -42,11 +42,16 @@ if not os.path.exists(f"{H}/.installe"):
     sh("pip install -q transformers==4.46.3 diffusers==0.30.0 huggingface_hub==0.30.2 accelerate==1.1.1 "
        "omegaconf einops trimesh pymeshlab xatlas pygltflib opencv-python-headless scikit-image pybind11 ninja")
     sh("pip install -q --no-build-isolation .", cwd=f"{H}/hy3dpaint/custom_rasterizer")
-    sh("bash compile_mesh_painter.sh", cwd=f"{H}/hy3dpaint/DifferentiableRenderer")
+    # le script fourni compte sur python3-config, absent de Colab : on donne nous-mêmes le bon suffixe
+    sh("c++ -O3 -Wall -shared -std=c++11 -fPIC $(python -m pybind11 --includes) mesh_inpaint_processor.cpp "
+       "-o mesh_inpaint_processor$(python -c \"import sysconfig; print(sysconfig.get_config_var('EXT_SUFFIX'))\")",
+       cwd=f"{H}/hy3dpaint/DifferentiableRenderer")
     open(f"{H}/.installe", "w").write("ok")
 
 os.makedirs(ENTREES, exist_ok=True)
 os.makedirs(SORTIES, exist_ok=True)
+for f in glob.glob("/content/*_detoure.png"):      # images déposées par le panneau « Fichiers »
+    shutil.move(f, os.path.join(ENTREES, os.path.basename(f)))
 try:
     from google.colab import files as _colab
 except ImportError:
